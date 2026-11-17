@@ -1,0 +1,241 @@
+# Kotost Aura («Аура»): damage turns the game into an edit about whoever hurt you. A berry bush pricks you:
+# a cool "Berry sigma" climbs out beside you, and your screen is a hardtekk edit about it (cinematic camera,
+# beat zooms, shakes, captions, grey "MOGGED", flashes). Aura per player; killing the character wins it back.
+# Native mod for Horizon nightly-2026-11-08-fdc87ae (docs/native-mods.md, horizon-mixins).
+# Grey and red come from vanilla post chains in the content pack kotost_aura_assets (no shader pack).
+[mod]
+id = "kotost_aura"
+version = "0.1.0"
+priority = 102
+
+[compatibility]
+horizon_revision = "fdc87aecdbd116bf1e08adcd062fcbaea8c2e2ca"
+
+[[module]]
+id = "server"
+file = "crates/horizon-client/src/game.rs"
+name = "kotost_aura"
+source = "aura.rs"
+visibility = "pub"
+
+[[module]]
+id = "edit"
+file = "crates/horizon-client/src/game.rs"
+name = "kotost_aura_edit"
+source = "edit.rs"
+visibility = "pub"
+
+# --- server ------------------------------------------------------------------------------------------
+[[injection]]
+id = "commands"
+kind = "HEAD"
+hook = "register_commands"
+hook_version = 1
+helper = "hooks/commands.rs"
+bindings = [{ name = "commands", ty = "&mut Vec<NativeCommand>", value = "&mut *commands" }]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+hook = "perform_command"
+hook_version = 1
+helper = "hooks/command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "&NativeServerPlayer", value = "player" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+# Every hit, read only: queued for the tick's end.
+[[injection]]
+id = "incoming"
+kind = "HEAD"
+hook = "living_incoming_damage"
+hook_version = 1
+helper = "hooks/incoming.rs"
+bindings = [
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+  { name = "causing", ty = "i32", value = "causing" },
+  { name = "direct", ty = "i32", value = "direct" },
+  { name = "amount", ty = "&mut f32", value = "&mut *amount" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+# A player's death (aura) and a character's (revenge).
+[[injection]]
+id = "death"
+kind = "HEAD"
+hook = "living_death"
+hook_version = 1
+helper = "hooks/death.rs"
+bindings = [
+  { name = "entity", ty = "u32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+  { name = "attacker", ty = "u32", value = "attacker" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "joined"
+kind = "HEAD"
+hook = "player_logged_in"
+hook_version = 1
+helper = "hooks/joined.rs"
+bindings = [{ name = "player", ty = "u128", value = "player" }]
+
+[[injection]]
+id = "server-tick"
+kind = "HEAD"
+hook = "server_tick"
+hook_version = 1
+helper = "hooks/server_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "phase", ty = "horizon_client::mod_api::ServerTickPhase", value = "phase" },
+]
+
+# Characters spawned and sent home in their level.
+[[injection]]
+id = "level-tick"
+kind = "HEAD"
+hook = "level_tick_post"
+hook_version = 1
+helper = "hooks/level_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+# --- client --------------------------------------------------------------------------------------------
+[[injection]]
+id = "tick"
+kind = "HEAD"
+hook = "tick"
+hook_version = 1
+helper = "hooks/tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+# The camera type, the post chains (grey, red) and the beat's sounds.
+[[injection]]
+id = "frame"
+kind = "HEAD"
+hook = "frame"
+hook_version = 1
+helper = "hooks/frame.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+[[injection]]
+id = "net-from-server"
+kind = "HEAD"
+hook = "net_from_server"
+hook_version = 1
+helper = "hooks/net_server.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" },
+]
+
+# Captions, letterbox, flashes, tints, the character's frame, the aura.
+[[injection]]
+id = "hud"
+kind = "HEAD"
+hook = "hud"
+hook_version = 1
+helper = "hooks/hud.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]
+
+# The edit's shots.
+[[injection]]
+id = "camera-pose"
+kind = "HEAD"
+hook = "camera_pose"
+hook_version = 1
+helper = "hooks/camera_pose.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "position", ty = "&mut [f64; 3]", value = "&mut *position" },
+  { name = "yaw", ty = "&mut f32", value = "&mut *yaw" },
+  { name = "pitch", ty = "&mut f32", value = "&mut *pitch" },
+]
+
+[[injection]]
+id = "fov"
+kind = "HEAD"
+hook = "compute_fov"
+hook_version = 1
+helper = "hooks/fov.rs"
+bindings = [{ name = "degrees", ty = "&mut f32", value = "&mut *degrees" }]
+
+[[injection]]
+id = "shake"
+kind = "HEAD"
+hook = "camera_shake"
+hook_version = 1
+helper = "hooks/shake.rs"
+bindings = [{ name = "shake", ty = "&mut NativeShake", value = "&mut *shake" }]
+
+# The black void.
+[[injection]]
+id = "fog"
+kind = "HEAD"
+hook = "render_fog"
+hook_version = 1
+helper = "hooks/fog.rs"
+bindings = [{ name = "fog", ty = "&mut horizon_client::fog::FogData", value = "&mut *fog" }]
+
+# The whip blur on each cut: vanilla's menu blur.
+[[injection]]
+id = "blur"
+kind = "HEAD"
+hook = "menu_background"
+hook_version = 1
+helper = "hooks/blur.rs"
+bindings = [{ name = "radius", ty = "&mut Option<f32>", value = "&mut *radius" }]
+
+[[injection]]
+id = "music"
+kind = "HEAD"
+hook = "music"
+hook_version = 1
+helper = "hooks/music.rs"
+bindings = [
+  { name = "music", ty = "&mut Option<Music>", value = "&mut *music" },
+  { name = "volume", ty = "&mut f32", value = "&mut *volume" },
+]
+
+[[injection]]
+id = "music-layers"
+kind = "HEAD"
+hook = "music_layers"
+hook_version = 1
+helper = "hooks/music_layers.rs"
+bindings = [{ name = "layers", ty = "&mut Vec<MusicLayer>", value = "&mut *layers" }]
+
+# The berry character's model (mob_submit needs player_render_listened).
+[[injection]]
+id = "mob-submit"
+kind = "HEAD"
+hook = "mob_submit"
+hook_version = 1
+helper = "hooks/mob_submit.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "mob", ty = "&NativeMobRender<'_>", value = "mob" },
+  { name = "draw", ty = "&mut BlockEntityDraw", value = "&mut *draw" },
+  { name = "drawn", ty = "&mut bool", value = "&mut *drawn" },
+]
+
+[[injection]]
+id = "listened"
+kind = "HEAD"
+hook = "player_render_listened"
+hook_version = 1
+helper = "hooks/listened.rs"
+bindings = [{ name = "listened", ty = "&mut bool", value = "&mut *listened" }]

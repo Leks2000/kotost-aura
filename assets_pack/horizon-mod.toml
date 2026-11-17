@@ -1,0 +1,8 @@
+id = "kotost_aura_assets"
+name = "Kotost Aura Assets"
+version = "0.1.0"
+description = "Grey and red screen filters for the native mod kotost_aura (vanilla post chains, not a shader pack)."
+authors = ["Kotost Games"]
+api = "0.2"
+side = "client"
+capabilities = []
