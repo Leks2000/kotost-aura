@@ -6,7 +6,7 @@
 # to the frame's list, which the API has no call for.
 id = "kotost_aura"
 name = "Kotost Aura"
-version = "0.2.0"
+version = "0.2.1"
 description = "Aura: damage turns your screen into a hardtekk edit about whoever hurt you; win your aura back by revenge"
 authors = ["Kotost Games"]
 api = "0.2"

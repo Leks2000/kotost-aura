@@ -46,7 +46,6 @@ struct Ccfg {
     beat: f32,
     big_seconds: f32,
     track: String,
-    prewarm: bool,
     words: HashMap<String, Vec<String>>,
     whispers: Vec<String>,
 }
@@ -65,13 +64,13 @@ fn load_ccfg() -> Ccfg {
         words.insert((*t).to_owned(), w);
     }
     Ccfg {
-        flashes: num(&c, "flashes", 1.0) != 0.0,
+        // Off by default: white flashes and red pulses only for a player who turns them on.
+        flashes: num(&c, "screen_flashes", 0.0) != 0.0,
         volume: num(&c, "volume", 1.0).clamp(0.0, 2.0) as f32,
         beat_volume: num(&c, "beat_volume", 1.0).clamp(0.0, 2.0) as f32,
         beat: 60.0 / num(&c, "bpm", 150.0).clamp(60.0, 220.0) as f32,
         big_seconds: num(&c, "edit_seconds", 6.0).clamp(1.0, 30.0) as f32,
         track: c.get("track").cloned().unwrap_or_default(),
-        prewarm: num(&c, "prewarm", 1.0) != 0.0,
         words,
         whispers: list("whispers"),
     }
@@ -124,8 +123,6 @@ struct Client {
     cam_before: Option<CameraType>,
     pose: Option<Pose>,
     fov: f32,
-    world_at: Option<Instant>,
-    prewarm: u8,
 }
 
 static CLIENT: Mutex<Option<Client>> = Mutex::new(None);
@@ -299,11 +296,6 @@ pub fn tick(host: &mut dyn ClientHost) {
         let keep: Vec<u32> = c.edit.iter().filter_map(|e| e.char_id).collect();
         ents.retain(|id, at| at[0].is_finite() || keep.contains(id));
         c.ents = ents;
-        if !in_world {
-            c.world_at = None;
-        } else if c.world_at.is_none() {
-            c.world_at = Some(Instant::now());
-        }
         let check = c.cfg_at.is_none_or(|a| a.elapsed().as_secs_f32() > 5.0);
         if check {
             c.cfg_at = Some(Instant::now());
@@ -341,16 +333,6 @@ pub fn frame(host: &mut dyn ClientHost) {
     let mut sounds: Vec<(&'static str, f32, f32)> = Vec::new();
     let mut at = [feet[0], feet[1] + 1.62, feet[2]];
     client(|c| {
-        // The first time a post chain runs, its pipelines compile (a short freeze): once, early.
-        if c.prewarm < 3 && c.world_at.is_some_and(|w| w.elapsed().as_secs_f32() > 3.0) && cfg(c).prewarm {
-            c.prewarm += 1;
-            match c.prewarm {
-                1 => fx = vec![FX_GREY.to_owned()],
-                2 => fx = vec![FX_RED.to_owned()],
-                _ => {}
-            }
-            return;
-        }
         let Some((mut e, n, k)) = active(c) else {
             c.edit = None;
             return;
@@ -361,12 +343,13 @@ pub fn frame(host: &mut dyn ClientHost) {
         if e.big && n.t >= e.pre - 0.05 && n.left > 0.05 {
             camera = Some(CameraType::ThirdPersonBack);
         }
-        // Grey on "MOGGED", red on the last beat (all the close-up for fire) and on the off-beats
-        // of "НЕИГРАБЕЛЬНО".
+        // Grey on "MOGGED", red all the close-up for fire; with `flashes` on, also red on the last
+        // beat and on the off-beats of "НЕИГРАБЕЛЬНО" (full-screen pulses).
         let last_beat = n.left < k.beat;
+        let pulse = k.flashes && ((e.big && last_beat) || (e.maxed && n.beat % 2 == 1));
         if n.shot == Some(Shot::Mogged) {
             fx = vec![FX_GREY.to_owned()];
-        } else if (e.big && last_beat) || (n.shot == Some(Shot::Close) && e.theme == "fire") || (e.maxed && n.beat % 2 == 1) {
+        } else if pulse || (n.shot == Some(Shot::Close) && e.theme == "fire") {
             fx = vec![FX_RED.to_owned()];
         }
         // With the owner's track every vanilla sound of the edit follows `beat_volume` (0: the track alone).
@@ -700,7 +683,7 @@ pub fn hud(host: &dyn ClientHost, b: &mut dyn DrawContext) {
             b.fill([0.0, 0.0, w, bar], 0xFF00_0000);
             b.fill([0.0, h - bar, w, bar], 0xFF00_0000);
         }
-        // A tint by theme; a red pulse on "НЕИГРАБЕЛЬНО".
+        // A tint by theme; a red pulse on "НЕИГРАБЕЛЬНО" (with `flashes` on).
         let tint = match e.theme.as_str() {
             "fire" => Some(0xFF7A1A),
             "water" => Some(0x2A6AFF),
@@ -710,7 +693,7 @@ pub fn hud(host: &dyn ClientHost, b: &mut dyn DrawContext) {
         if let Some(rgb) = tint {
             b.fill([0.0, 0.0, w, h], argb(0.12, rgb));
         }
-        if e.maxed && n.since_drop >= 0.0 {
+        if k.flashes && e.maxed && n.since_drop >= 0.0 {
             b.fill([0.0, 0.0, w, h], argb(0.25 * (-n.phase * 4.0).exp(), 0xFF0000));
         }
         // Flashes: on the drop and on each cut (at most every two beats), white.

@@ -4,7 +4,7 @@
 // screen is a hardtekk edit about it: a cinematic camera, beat zooms, shakes, captions word by word,
 // a grey "MOGGED", flashes. The victim loses aura; killing the character wins it back (revenge).
 //
-// Server half: damage (`living_incoming_damage`, read only) and deaths are queued by the hooks and
+// Server half: damage (`living_damage_post`, read only) and deaths are queued by the hooks and
 // handled at the end of the server tick; characters are spawned and removed in `level_tick` for the
 // level in place. Aura per player: config/kotost_aura_players.json. Settings: config/kotost_aura.txt
 // (shared with the client half: flashes, volume, bpm, words).
@@ -98,8 +98,8 @@ aura_other = -100
 aura_death = -1000
 aura_revenge = 1000
 # Клиент (у каждого свой)
-# 0: без белых вспышек
-flashes = 1
+# 1: белые вспышки и красные пульсации на весь экран (по умолчанию выключены)
+screen_flashes = 0
 volume = 1.0
 bpm = 150
 # свой трек (звуковое событие ресурспака, stream; старт за 0,1 с до дропа); пусто: только бит из ванильных звуков
@@ -368,15 +368,16 @@ pub fn perform_command(game: &mut Game<'_>, player: &NativeServerPlayer, command
     let _ = game.native_tell(player.uuid, Text::literal(reply.as_str()));
 }
 
-/// `living_incoming_damage` (v1): read only, queued for the tick's end.
-pub fn incoming(entity: i32, damage_type: &str, _causing: i32, _direct: i32, amount: &mut f32, canceled: &mut bool) {
-    if *canceled || *amount < *lock(&MIN_DAMAGE) {
+/// `living_damage_post` (v1): only what came off the health (after the shield, the hurt cooldown
+/// and every reduction; a fully blocked hit is 0 and costs nothing), queued for the tick's end.
+pub fn incoming(entity: i32, damage_type: &str, _causing: i32, _direct: i32, amount: f32) {
+    if !(amount >= *lock(&MIN_DAMAGE)) {
         return;
     }
     if lock(&CHAR_IDS).contains(&(entity as u32)) {
         return;
     }
-    push(Ev::Hit(Hit { entity, theme: theme_of(damage_type), amount: *amount, test: false }));
+    push(Ev::Hit(Hit { entity, theme: theme_of(damage_type), amount, test: false }));
 }
 
 pub fn living_death(entity: u32, kind: &str, _damage_type: &str, attacker: u32, _cancel: &mut bool) {
@@ -494,14 +495,20 @@ fn server_tick(game: &mut Game<'_>) {
                 let per = s.players.entry(killer.uuid).or_default();
                 per.aura += delta;
                 let total = per.aura;
+                let off = per.off;
                 s.dirty = true;
                 let own = c.owner == killer.uuid;
-                send(
-                    game,
-                    killer.uuid,
-                    CH_EDIT,
-                    json!({"t": "revenge", "c": 1, "m": false, "b": false, "d": delta, "a": total, "s": rand_u32(), "own": own}),
-                );
+                // The balance always; the edit only for a player who has not turned it off.
+                if off {
+                    send(game, killer.uuid, CH_AURA, json!({"a": total, "d": delta}));
+                } else {
+                    send(
+                        game,
+                        killer.uuid,
+                        CH_EDIT,
+                        json!({"t": "revenge", "c": 1, "m": false, "b": false, "d": delta, "a": total, "s": rand_u32(), "own": own}),
+                    );
+                }
             }
         }
     }

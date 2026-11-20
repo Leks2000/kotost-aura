@@ -401,12 +401,16 @@ pub fn server_tick(host: &mut dyn ServerHost) {
                 let per = s.players.entry(killer.uuid).or_default();
                 per.aura += delta;
                 let total = per.aura;
+                let off = per.off;
                 s.dirty = true;
                 let own = c.owner == killer.uuid;
-                sends.push((
-                    killer.player,
-                    json!({"k": "edit", "t": "revenge", "c": 1, "m": false, "b": false, "d": delta, "a": total, "s": rand_u32(), "own": own}),
-                ));
+                // The balance always; the edit only for a player who has not turned it off.
+                let msg = if off {
+                    json!({"k": "aura", "a": total, "d": delta})
+                } else {
+                    json!({"k": "edit", "t": "revenge", "c": 1, "m": false, "b": false, "d": delta, "a": total, "s": rand_u32(), "own": own})
+                };
+                sends.push((killer.player, msg));
             }
         }
     }

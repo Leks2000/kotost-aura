@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use mod_api::{
     CameraPoseEvent, CameraShakeEvent, ClientHost, ClientTickPostEvent, ComputeFovEvent, Flow, GuiRenderPostEvent,
-    Hooks, Host, LevelRandomHost, LivingDeathEvent, ServerHost, LivingIncomingDamageEvent, MenuBackgroundEvent, MusicEvent, MusicLayersEvent,
+    Hooks, Host, LevelRandomHost, LivingDamagePostEvent, LivingDeathEvent, ServerHost, MenuBackgroundEvent, MusicEvent, MusicLayersEvent,
     PayloadId, PlayerLoggedInEvent, RegisterCommandsEvent, Registrar, RegistrationContext, RenderFogEvent,
     RenderFramePreEvent, RenderLivingPreEvent, RunModCommandEvent, ServerTickEvent,
 };
@@ -106,8 +106,8 @@ aura_other = -100
 aura_death = -1000
 aura_revenge = 1000
 # Клиент (у каждого свой)
-# 0: без белых вспышек
-flashes = 1
+# 1: белые вспышки и красные пульсации на весь экран (по умолчанию выключены)
+screen_flashes = 0
 volume = 1.0
 bpm = 150
 # свой трек (звуковое событие ресурспака, stream; старт за 0,1 с до дропа); пусто: только бит из ванильных звуков
@@ -195,11 +195,14 @@ impl Hooks for Mod {
         server::run_command(host, event)
     }
 
-    fn living_incoming_damage(&self, _level: &mut dyn LevelRandomHost, event: &mut LivingIncomingDamageEvent<'_>) -> Flow {
-        if !event.cancelled {
-            server::incoming(event.entity, event.source.damage_type, event.container.new_damage());
+    /// Only a hit that landed: after the shield, the hurt cooldown and every reduction. What it took
+    /// from health and the absorption hearts; a fully blocked hit is 0 and costs nothing.
+    fn living_damage_post(&self, _level: &mut dyn LevelRandomHost, event: &mut LivingDamagePostEvent<'_>) {
+        let c = event.container;
+        if c.should_cause_side_effects() {
+            let landed = c.health_damage() + c.reduction(mod_api::Reduction::Absorption);
+            server::incoming(event.entity, event.source.damage_type, landed);
         }
-        Flow::Continue
     }
 
     fn living_death(&self, _host: &mut dyn ServerHost, event: &mut LivingDeathEvent<'_>) -> Flow {
