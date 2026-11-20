@@ -42,6 +42,7 @@ const PLAN: [Shot; 6] = [Shot::Face, Shot::Void, Shot::Hero, Shot::Orbit, Shot::
 struct Ccfg {
     flashes: bool,
     volume: f32,
+    beat_volume: f32,
     beat: f32,
     big_seconds: f32,
     track: String,
@@ -66,6 +67,7 @@ fn load_ccfg() -> Ccfg {
     Ccfg {
         flashes: aura::num(&c, "flashes", 1.0) != 0.0,
         volume: aura::num(&c, "volume", 1.0).clamp(0.0, 2.0) as f32,
+        beat_volume: aura::num(&c, "beat_volume", 1.0).clamp(0.0, 2.0) as f32,
         beat: 60.0 / aura::num(&c, "bpm", 150.0).clamp(60.0, 220.0) as f32,
         big_seconds: aura::num(&c, "edit_seconds", 6.0).clamp(1.0, 30.0) as f32,
         track: c.get("track").cloned().unwrap_or_default(),
@@ -366,6 +368,8 @@ pub fn frame(game: &mut Game<'_>) {
             // Only the newest half-beat: a long frame never stacks sounds.
             if half > e.half_done {
                 let h = half;
+                // Under the owner's track the vanilla beat follows `beat_volume` (kick, snare, hat, bell).
+                let v = if e.big && !k.track.is_empty() { v * k.beat_volume } else { v };
                 if h % 2 == 0 {
                     sounds.push(("minecraft:entity.warden.heartbeat", 1.0 * v, 1.1));
                     sounds.push(("minecraft:block.note_block.basedrum", 0.9 * v, 0.6));
