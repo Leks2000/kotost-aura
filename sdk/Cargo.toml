@@ -1,0 +1,9 @@
+[package]
+name = "kotost_aura"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+# The pinned SDK's API crate, fetched into .horizon/sdk/ by `cargo horizon-mod` (the launcher builds
+# against its own copy of the same build).
+horizon-mod-api = { path = ".horizon/sdk/api/crates/horizon-mod-api" }

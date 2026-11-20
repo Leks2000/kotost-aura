@@ -357,7 +357,8 @@ pub fn frame(game: &mut Game<'_>) {
         } else if (e.big && last_beat) || (n.shot == Some(Shot::Close) && e.theme == "fire") || (e.maxed && n.beat % 2 == 1) {
             fx = vec![FX_RED.to_owned()];
         }
-        let v = k.volume;
+        // With the owner's track every vanilla sound of the edit follows `beat_volume` (0: the track alone).
+        let v = if k.track.is_empty() { k.volume } else { k.volume * k.beat_volume };
         // -1: the whoosh is still to come; -2: it played, the beat has not started.
         if e.half_done == -1 {
             sounds.push(("minecraft:entity.breeze.wind_burst", 1.0 * v, 0.7));
@@ -368,8 +369,6 @@ pub fn frame(game: &mut Game<'_>) {
             // Only the newest half-beat: a long frame never stacks sounds.
             if half > e.half_done {
                 let h = half;
-                // Under the owner's track the vanilla beat follows `beat_volume` (kick, snare, hat, bell).
-                let v = if e.big && !k.track.is_empty() { v * k.beat_volume } else { v };
                 if h % 2 == 0 {
                     sounds.push(("minecraft:entity.warden.heartbeat", 1.0 * v, 1.1));
                     sounds.push(("minecraft:block.note_block.basedrum", 0.9 * v, 0.6));
@@ -611,11 +610,11 @@ pub fn music(_music: &mut Option<Music>, volume: &mut f32) {
     }
 }
 
-/// `native_music_layers`: the owner's own track under a big edit, when one is set.
+/// `native_music_layers`: the owner's own track under every edit (a mini edit plays its drop), when one is set.
 pub fn music_layers(layers: &mut Vec<MusicLayer>) {
     let track = client(|c| {
-        let (e, n, k) = active(c)?;
-        (e.big && n.since_drop >= -0.1 && !k.track.is_empty()).then(|| (k.track.clone(), k.volume.min(1.0)))
+        let (_, n, k) = active(c)?;
+        (n.since_drop >= -0.1 && !k.track.is_empty()).then(|| (k.track.clone(), k.volume.min(1.0)))
     });
     if let Some((sound, volume)) = track {
         layers.push(MusicLayer { sound, volume });

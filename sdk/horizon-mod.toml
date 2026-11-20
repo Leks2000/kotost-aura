@@ -1,0 +1,27 @@
+# Kotost Aura («Аура»): damage turns the game into an edit about whoever hurt you. A berry bush pricks you:
+# a cool "Berry sigma" climbs out beside you, and your screen is a hardtekk edit about it (cinematic camera,
+# beat zooms, shakes, captions, grey "MOGGED", flashes). Aura per player; killing the character wins it back.
+# SDK port of 0.1.1 (horizon-mixins, fdc87ae): everything is the mod API (src/lib.rs, src/server.rs,
+# src/edit.rs) except one RETURN mixin that adds the grey and red post chains (assets/kotost_aura/post_effect)
+# to the frame's list, which the API has no call for.
+id = "kotost_aura"
+name = "Kotost Aura"
+version = "0.2.0"
+description = "Aura: damage turns your screen into a hardtekk edit about whoever hurt you; win your aura back by revenge"
+authors = ["Kotost Games"]
+api = "0.2"
+side = "both"
+capabilities = ["registries"]
+
+[native]
+game = "26.3"
+horizon = "0a875da91dbb0fdcb7ba8c42c11341aa229af51a"
+mixins = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
+
+# The frame's post chains (`minecraft:end_of_frame`, /effect-style ones, the spectated mob's), plus ours.
+[[native.mixin]]
+id = "post"
+target = "horizon_client::game::screen_backgrounds::Game<'_>::requested_post_effects"
+kind = "RETURN"
+helper = "src/mixins/post.rs"
+bindings = [{ name = "value", ty = "Vec<String>", value = "$value" }]
